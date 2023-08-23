@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/plugins/shoreline_trend" >
+        <file>icon.png</file>
+    </qresource>
+</RCC>
