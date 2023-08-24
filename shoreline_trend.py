@@ -23,8 +23,10 @@
 """
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
-from qgis.core import QgsProject, QgsProcessing
+from qgis.PyQt.QtWidgets import QAction, QFileDialog
+from qgis.core import QgsProject, Qgis, QgsProcessingContext, QgsProcessingFeedback, QgsRasterLayer
+from qgis import processing
+
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -180,6 +182,11 @@ class shorelineChange:
                 action)
             self.iface.removeToolBarIcon(action)
 
+    def select_output_file(self):
+        filename, _filter = QFileDialog.getSaveFileName(
+            self.dlg, "Select   output file ","", '*.tif')
+        self.dlg.outputLineEditNDWI.setText(filename)
+
 
     def run(self):
         """Run method that performs all the real work"""
@@ -189,13 +196,25 @@ class shorelineChange:
         if self.first_start == True:
             self.first_start = False
             self.dlg = shorelineChangeDialog()
+            self.dlg.browseOutputNDWI.clicked.connect(self.select_output_file)
 
         # Fetch the currently loaded layers
         layers = QgsProject.instance().layerTreeRoot().children()
         # Clear the contents of the comboBox from previous runs
-        self.dlg.comboBox.clear()
+        self.dlg.multibandRasterComboboxNDWI.clear()
         # Populate the comboBox with names of all the loaded layers
-        self.dlg.comboBox([layer.name() for layer in layers])
+        self.dlg.multibandRasterComboboxNDWI.addItems([layer.name() for layer in layers])
+        
+        rasterlayerName=self.dlg.multibandRasterComboboxNDWI.currentText()
+        selectedRasterLayer=QgsProject.instance().mapLayersByName(rasterlayerName)[0]
+        num_bands=selectedRasterLayer.bandCount()
+        
+        self.dlg.greenBandComboBoxNDWI.clear()
+        self.dlg.greenBandComboBoxNDWI.addItems([str(num) for num in range(1,num_bands+1)])
+       
+        self.dlg.nirBandComboBoxNDWI.clear()
+        self.dlg.nirBandComboBoxNDWI.addItems([str(num) for num in range(1,num_bands+1)])
+
 
         # show the dialog
         self.dlg.show()
@@ -205,4 +224,40 @@ class shorelineChange:
         if result:
             # Do something useful here - delete the line containing pass and
             # substitute with your code.
-            pass
+            greenBandName = int(self.dlg.greenBandComboBoxNDWI.currentText())
+            nirBandName = int(self.dlg.nirBandComboBoxNDWI.currentText())
+
+            output_ndwi = self.dlg.outputLineEditNDWI.text()
+        
+            alg_params = {
+                'BAND_A': greenBandName,
+                'BAND_B': nirBandName,
+                'FORMULA': '(A-B)/(A+B)',
+                'INPUT_A': selectedRasterLayer,
+                'INPUT_B': selectedRasterLayer,
+                'OUTPUT': output_ndwi
+            }
+
+            # Prepare the processing context and feedback
+            context = QgsProcessingContext()
+            feedback = QgsProcessingFeedback()
+
+            # Compute NDWI
+            result=processing.run('gdal:rastercalculator', alg_params, context=context, feedback=feedback)
+
+            if result['OUTPUT']:
+                # NDWI calculation successful
+                print("NDWI calculation successful. Output saved at:", result['OUTPUT'])
+                self.iface.messageBar().pushMessage(
+                "Success", "Output file written at " + output_ndwi,
+                level=Qgis.Success, duration=3)
+                ndwi_layer = QgsRasterLayer(result['OUTPUT'], "NDWI")
+                QgsProject.instance().addMapLayer(ndwi_layer)
+            else:
+                # NDWI calculation failed
+                print("NDWI calculation failed.")
+                self.iface.messageBar().pushMessage(
+                "Failed", "Imeuma inje",
+                level=Qgis.Failed, duration=3)
+            
+            
