@@ -1,4 +1,4 @@
-from qgis.core import QgsProject, Qgis, QgsProcessingContext, QgsProcessingFeedback, QgsProcessingMultiStepFeedback, QgsRasterLayer, QgsProcessing
+from qgis.core import QgsProject, Qgis, QgsProcessingContext, QgsProcessingFeedback, QgsProcessingMultiStepFeedback, QgsRasterLayer, QgsProcessing, QgsVectorLayer
 from qgis import processing
 
 def process_ndwi_function(dlg):
@@ -58,10 +58,13 @@ def process_ndwi_function(dlg):
         outputs['ReclassifybyTable'] = processing.run('native:reclassifybytable', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
         feedback.setProgress(100)
 
-        if outputs['ReclassifybyTable']['OUTPUT']:
+        vect_params = {'INPUT': outputs['ReclassifybyTable']['OUTPUT'],'BAND':1,'FIELD':'DN', 'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT}
+        outputs['polygonize'] = processing.run('gdal:polygonize', vect_params, context=context, feedback=model_feedback)
+
+        if outputs['polygonize']['OUTPUT']:
             # NDWI calculation successful
-            print("NDWI calculation successful. Output saved at:", outputs['ReclassifybyTable']['OUTPUT'])
-            return outputs['ReclassifybyTable']['OUTPUT']
+            print("NDWI calculation successful. Output saved at:", outputs['polygonize']['OUTPUT'])
+            return outputs['polygonize']['OUTPUT']
         else:
             # NDWI calculation failed
             print("NDWI calculation failed.")

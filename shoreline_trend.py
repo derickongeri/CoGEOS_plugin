@@ -25,7 +25,7 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QFileDialog
 from .ndwi_processing import process_ndwi_function
-from qgis.core import QgsProject, Qgis, QgsProcessingContext, QgsProcessingFeedback, QgsProcessingMultiStepFeedback, QgsRasterLayer, QgsProcessing
+from qgis.core import QgsProject, Qgis, QgsProcessingContext, QgsProcessingFeedback, QgsProcessingMultiStepFeedback, QgsRasterLayer, QgsProcessing, QgsVectorLayer
 from qgis import processing
 
 
@@ -206,17 +206,16 @@ class shorelineChange:
         else:
             print("No layers in the project")
 
-    # def checkCurrentTabNDWI(self):
-    #     current_tab_index=self.dlg.NDWI.tabText(self.dlg.NDWI.currentIndex())
-    #     if 
+    
     def process(self):
+        # Check the selected tab
         current_tab_index=self.dlg.NDWI.tabText(self.dlg.NDWI.currentIndex())
         print(current_tab_index)
         if current_tab_index == 'Land-Water Mask(NDWI)':
             output_path = process_ndwi_function(self.dlg)
         
             if output_path is not None:
-                ndwi_layer = QgsRasterLayer(output_path, "NDWI")
+                ndwi_layer = QgsVectorLayer(output_path, "NDWI", 'ogr')
                 self.iface.messageBar().pushMessage(
                     "Success", "Output file written at " + output_path,
                     level=Qgis.Success, duration=3)
@@ -228,21 +227,6 @@ class shorelineChange:
                 self.iface.messageBar().pushMessage(
                     "Failed", "Imeuma inje",
                     level=Qgis.Failed, duration=3)
-
-            # if outputs['ReclassifybyTable']['OUTPUT']:
-            #     # NDWI calculation successful
-            #     print("NDWI calculation successful. Output saved at:", outputs['ReclassifybyTable']['OUTPUT'])
-            #     self.iface.messageBar().pushMessage(
-            #         "Success", "Output file written at " + output_ndwi,
-            #         level=Qgis.Success, duration=3)
-            #     ndwi_layer = QgsRasterLayer(outputs['ReclassifybyTable']['OUTPUT'], "NDWI")
-            #     QgsProject.instance().addMapLayer(ndwi_layer)
-            # else:
-            #     # NDWI calculation failed
-            #     print("NDWI calculation failed.")
-            #     self.iface.messageBar().pushMessage(
-            #         "Failed", "Imeuma inje",
-            #         level=Qgis.Failed, duration=3)
         else:
             print("Parameters for selected tab do not exist")
 
