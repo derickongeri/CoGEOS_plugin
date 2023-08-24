@@ -24,7 +24,8 @@
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QFileDialog
-from qgis.core import QgsProject, Qgis, QgsProcessingContext, QgsProcessingFeedback, QgsRasterLayer
+from .ndwi_processing import process_ndwi_function
+from qgis.core import QgsProject, Qgis, QgsProcessingContext, QgsProcessingFeedback, QgsProcessingMultiStepFeedback, QgsRasterLayer, QgsProcessing
 from qgis import processing
 
 
@@ -163,9 +164,10 @@ class shorelineChange:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = ':/plugins/shoreline_trend/icon.png'
+        # icon_path = ':/plugins/shoreline_trend/icon.png'
         self.add_action(
-            icon_path,
+            #icon_path,
+            QIcon(os.path.join(os.path.dirname(__file__), "icon.png")),
             text=self.tr(u'Extract Shoreline'),
             callback=self.run,
             parent=self.iface.mainWindow())
@@ -173,7 +175,7 @@ class shorelineChange:
         # will be set False in run()
         self.first_start = True
 
-
+        
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
@@ -187,6 +189,62 @@ class shorelineChange:
             self.dlg, "Select   output file ","", '*.tif')
         self.dlg.outputLineEditNDWI.setText(filename)
 
+    def getBandCount(self):
+        rasterlayerName=self.dlg.multibandRasterComboboxNDWI.currentText()
+        layers=QgsProject.instance().mapLayersByName(rasterlayerName)
+        if layers:
+            selectedRasterLayer=layers[0]
+            print (selectedRasterLayer)
+            num_bands=selectedRasterLayer.bandCount()
+            
+            self.dlg.greenBandComboBoxNDWI.clear()
+            self.dlg.greenBandComboBoxNDWI.addItems([str(num) for num in range(1,num_bands+1)])
+        
+            self.dlg.nirBandComboBoxNDWI.clear()
+            self.dlg.nirBandComboBoxNDWI.addItems([str(num) for num in range(1,num_bands+1)])
+            return selectedRasterLayer
+        else:
+            print("No layers in the project")
+
+    # def checkCurrentTabNDWI(self):
+    #     current_tab_index=self.dlg.NDWI.tabText(self.dlg.NDWI.currentIndex())
+    #     if 
+    def process(self):
+        current_tab_index=self.dlg.NDWI.tabText(self.dlg.NDWI.currentIndex())
+        print(current_tab_index)
+        if current_tab_index == 'Land-Water Mask(NDWI)':
+            output_path = process_ndwi_function(self.dlg)
+        
+            if output_path is not None:
+                ndwi_layer = QgsRasterLayer(output_path, "NDWI")
+                self.iface.messageBar().pushMessage(
+                    "Success", "Output file written at " + output_path,
+                    level=Qgis.Success, duration=3)
+                QgsProject.instance().addMapLayer(ndwi_layer)
+
+            else:
+                # NDWI calculation failed
+                print("NDWI calculation failed.")
+                self.iface.messageBar().pushMessage(
+                    "Failed", "Imeuma inje",
+                    level=Qgis.Failed, duration=3)
+
+            # if outputs['ReclassifybyTable']['OUTPUT']:
+            #     # NDWI calculation successful
+            #     print("NDWI calculation successful. Output saved at:", outputs['ReclassifybyTable']['OUTPUT'])
+            #     self.iface.messageBar().pushMessage(
+            #         "Success", "Output file written at " + output_ndwi,
+            #         level=Qgis.Success, duration=3)
+            #     ndwi_layer = QgsRasterLayer(outputs['ReclassifybyTable']['OUTPUT'], "NDWI")
+            #     QgsProject.instance().addMapLayer(ndwi_layer)
+            # else:
+            #     # NDWI calculation failed
+            #     print("NDWI calculation failed.")
+            #     self.iface.messageBar().pushMessage(
+            #         "Failed", "Imeuma inje",
+            #         level=Qgis.Failed, duration=3)
+        else:
+            print("Parameters for selected tab do not exist")
 
     def run(self):
         """Run method that performs all the real work"""
@@ -196,68 +254,20 @@ class shorelineChange:
         if self.first_start == True:
             self.first_start = False
             self.dlg = shorelineChangeDialog()
+            self.dlg.button_box.accepted.disconnect()
+            self.dlg.button_box.accepted.connect(self.process)
             self.dlg.browseOutputNDWI.clicked.connect(self.select_output_file)
-
+            self.dlg.multibandRasterComboboxNDWI.currentIndexChanged.connect(self.getBandCount)
+        
         # Fetch the currently loaded layers
         layers = QgsProject.instance().layerTreeRoot().children()
         # Clear the contents of the comboBox from previous runs
         self.dlg.multibandRasterComboboxNDWI.clear()
         # Populate the comboBox with names of all the loaded layers
         self.dlg.multibandRasterComboboxNDWI.addItems([layer.name() for layer in layers])
-        
-        rasterlayerName=self.dlg.multibandRasterComboboxNDWI.currentText()
-        selectedRasterLayer=QgsProject.instance().mapLayersByName(rasterlayerName)[0]
-        num_bands=selectedRasterLayer.bandCount()
-        
-        self.dlg.greenBandComboBoxNDWI.clear()
-        self.dlg.greenBandComboBoxNDWI.addItems([str(num) for num in range(1,num_bands+1)])
-       
-        self.dlg.nirBandComboBoxNDWI.clear()
-        self.dlg.nirBandComboBoxNDWI.addItems([str(num) for num in range(1,num_bands+1)])
-
-
+            
         # show the dialog
         self.dlg.show()
-        # Run the dialog event loop
-        result = self.dlg.exec_()
-        # See if OK was pressed
-        if result:
-            # Do something useful here - delete the line containing pass and
-            # substitute with your code.
-            greenBandName = int(self.dlg.greenBandComboBoxNDWI.currentText())
-            nirBandName = int(self.dlg.nirBandComboBoxNDWI.currentText())
-
-            output_ndwi = self.dlg.outputLineEditNDWI.text()
         
-            alg_params = {
-                'BAND_A': greenBandName,
-                'BAND_B': nirBandName,
-                'FORMULA': '(A-B)/(A+B)',
-                'INPUT_A': selectedRasterLayer,
-                'INPUT_B': selectedRasterLayer,
-                'OUTPUT': output_ndwi
-            }
-
-            # Prepare the processing context and feedback
-            context = QgsProcessingContext()
-            feedback = QgsProcessingFeedback()
-
-            # Compute NDWI
-            result=processing.run('gdal:rastercalculator', alg_params, context=context, feedback=feedback)
-
-            if result['OUTPUT']:
-                # NDWI calculation successful
-                print("NDWI calculation successful. Output saved at:", result['OUTPUT'])
-                self.iface.messageBar().pushMessage(
-                "Success", "Output file written at " + output_ndwi,
-                level=Qgis.Success, duration=3)
-                ndwi_layer = QgsRasterLayer(result['OUTPUT'], "NDWI")
-                QgsProject.instance().addMapLayer(ndwi_layer)
-            else:
-                # NDWI calculation failed
-                print("NDWI calculation failed.")
-                self.iface.messageBar().pushMessage(
-                "Failed", "Imeuma inje",
-                level=Qgis.Failed, duration=3)
             
             
